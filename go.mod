@@ -3,6 +3,7 @@ module chromedp_keyWord
 go 1.13
 
 require (
+	github.com/PuerkitoBio/goquery v1.6.1
 	github.com/c9s/gomon v1.3.0
 	github.com/chromedp/cdproto v0.0.0-20210429002609-5ec2b0624aec
 	github.com/chromedp/chromedp v0.7.1

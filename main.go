@@ -3,12 +3,16 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
+	"strings"
 	"time"
 
+	"github.com/PuerkitoBio/goquery"
 	"github.com/c9s/gomon/logger"
 	"github.com/chromedp/chromedp"
 	"github.com/chromedp/chromedp/kb"
@@ -20,7 +24,7 @@ func main() {
 		chromedp.Flag("no-default-browser-check", true),
 		chromedp.Flag("no-sandbox", true),
 		chromedp.Flag("blink-settings", "imagesEnabled=false"),
-		chromedp.Flag("headless", false),
+		chromedp.Flag("headless", true),
 		chromedp.WindowSize(1920, 1080),
 		chromedp.UserAgent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/77.0.3830.0 Safari/537.36"),
 	}
@@ -71,13 +75,30 @@ func main() {
 	if sleepErr != nil {
 		log.Fatal(sleepErr)
 	}
-	log.Printf("OK\n")
-	log.Printf("1 \n")
-	log.Printf("2 \n")
-	log.Printf("3 \n")
-	log.Printf("4 \n")
-	log.Printf("5 \n")
-	log.Printf("：" + htmlContent)
+	// log.Printf("OK\n")
+	// log.Printf("：" + htmlContent)
+	ParsingData(htmlContent)
+}
+
+func ParsingData(res string) bool {
+	doc, err := goquery.NewDocumentFromReader(bytes.NewReader([]byte(res)))
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	hasCurrentItem := false
+	doc.Find(".yuRUbf").Each(func(i int, s *goquery.Selection) {
+		chartCardTitle := s.Find(".LC20lb").Text()
+		isCurrentItem := strings.Contains(chartCardTitle, "Relithe")
+		if isCurrentItem {
+			fmt.Printf("%d：%s\n", i, chartCardTitle)
+			hasCurrentItem = true
+		}
+
+		time.Sleep(1 * time.Second)
+	})
+
+	return hasCurrentItem
 }
 
 // //獲取網站上爬取的資料
