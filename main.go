@@ -9,13 +9,13 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/c9s/gomon/logger"
 	"github.com/chromedp/chromedp"
-	"github.com/chromedp/chromedp/kb"
 )
 
 func main() {
@@ -51,54 +51,112 @@ func main() {
 	ctx, cancel = context.WithTimeout(ctx, 40*time.Second)
 	defer cancel()
 
-	// navigate to a page, wait for an element, click
-	var htmlContent string
-	runErr := chromedp.Run(ctx,
-		// chromedp.Navigate(`https://www.google.com.tw/search?q=台中二手精品`),
-		chromedp.Navigate(`https://www.google.com.tw`),
-		chromedp.WaitVisible(`.SDkEP input[name="q"]`, chromedp.BySearch), // waiting for element exist
+	Rank := 0
+	hasCurrentItem := false
 
-		chromedp.Sleep(1*time.Second),
-		chromedp.SetValue(`.SDkEP input[name="q"]`, "台中二手精品", chromedp.BySearch),
-		chromedp.SendKeys(`.SDkEP input[name="q"]`, kb.Enter), // 按下Enter
+	for i := 1; i <= 20; i++ {
+		fmt.Printf("%d\n", i)
+		// navigate
+		if i == 1 {
+			err = chromedp.Run(ctx,
+				chromedp.Navigate(`https://www.google.com.tw/search?q=二手精品`),
+				chromedp.Sleep(1*time.Second),
+				chromedp.WaitVisible(`#search div[id="rso"]`),
+			)
+		} else {
+			pageSelection := `a[aria-label="Page ` + strconv.Itoa(i) + `"]`
+			err = chromedp.Run(ctx,
+				chromedp.Click(pageSelection),
+				chromedp.Sleep(1*time.Second),
+				chromedp.WaitReady(`#search div[id="rso"]`),
+			)
+		}
+		if err != nil {
+			logger.Info("Run err :", err)
+			return
+		}
+
+		// outer source data
+		htmlContent, runErr := outerPageSourceData(ctx)
+		if runErr != nil {
+			logger.Info("Outer err : %v", runErr)
+			return
+		}
+
+		sleepErr := chromedp.Run(ctx,
+			chromedp.Sleep(2*time.Second),
+		)
+		if sleepErr != nil {
+			log.Fatal(sleepErr)
+		}
+
+		Rank, hasCurrentItem = ParsingData(htmlContent, Rank, i)
+		if hasCurrentItem {
+			return
+		}
+	}
+
+	// navigate to a page, wait for an element, click
+	// var htmlContent string
+	// runErr := chromedp.Run(ctx,
+	// 	// chromedp.Navigate(`https://www.google.com.tw/search?q=台中二手精品`),
+	// 	chromedp.Navigate(`https://www.google.com.tw`),
+	// 	chromedp.WaitVisible(`.SDkEP input[name="q"]`, chromedp.BySearch), // waiting for element exist
+
+	// 	chromedp.Sleep(1*time.Second),
+	// 	chromedp.SetValue(`.SDkEP input[name="q"]`, "台中二手精品", chromedp.BySearch),
+	// 	chromedp.SendKeys(`.SDkEP input[name="q"]`, kb.Enter), // 按下Enter
+	// 	chromedp.WaitVisible(`#search div[id="rso"]`),
+	// 	chromedp.OuterHTML(`#search div[id="rso"]`, &htmlContent, chromedp.BySearch),
+	// )
+	// htmlContent, runErr := outerPageSourceData(ctx)
+	// if runErr != nil {
+	// 	logger.Info("Run err : %v\n", runErr)
+	// 	return
+	// }
+
+	// sleepErr := chromedp.Run(ctx,
+	// 	chromedp.Sleep(10*time.Second),
+	// )
+	// if sleepErr != nil {
+	// 	log.Fatal(sleepErr)
+	// }
+	// // log.Printf("OK\n")
+	// // log.Printf("：" + htmlContent)
+	// ParsingData(htmlContent)
+}
+
+// 輸出page source data
+func outerPageSourceData(ctx context.Context) (string, error) {
+	var htmlContent string
+	err := chromedp.Run(ctx,
 		chromedp.WaitVisible(`#search div[id="rso"]`),
 		chromedp.OuterHTML(`#search div[id="rso"]`, &htmlContent, chromedp.BySearch),
 	)
-	if err != nil {
-		logger.Info("Run err : %v\n", runErr)
-		return
-	}
 
-	sleepErr := chromedp.Run(ctx,
-		chromedp.Sleep(10*time.Second),
-	)
-	if sleepErr != nil {
-		log.Fatal(sleepErr)
-	}
-	// log.Printf("OK\n")
-	// log.Printf("：" + htmlContent)
-	ParsingData(htmlContent)
+	return htmlContent, err
 }
 
-func ParsingData(res string) bool {
+func ParsingData(res string, rank int, page int) (int, bool) {
 	doc, err := goquery.NewDocumentFromReader(bytes.NewReader([]byte(res)))
 	if err != nil {
 		log.Fatal(err)
 	}
 
+	var itemTitle string
 	hasCurrentItem := false
 	doc.Find(".yuRUbf").Each(func(i int, s *goquery.Selection) {
-		chartCardTitle := s.Find(".LC20lb").Text()
-		isCurrentItem := strings.Contains(chartCardTitle, "Relithe")
+		itemTitle = s.Find(".LC20lb").Text()
+		isCurrentItem := strings.Contains(itemTitle, "Relithe")
+		rank++
 		if isCurrentItem {
-			fmt.Printf("%d：%s\n", i, chartCardTitle)
 			hasCurrentItem = true
+			fmt.Printf("\n Rank：%d,\n Page：%d,\n Index：%d,\n Title：%s\n", rank, page, (i + 1), itemTitle)
 		}
-
 		time.Sleep(1 * time.Second)
 	})
 
-	return hasCurrentItem
+	return rank, hasCurrentItem
 }
 
 // //獲取網站上爬取的資料
