@@ -28,20 +28,10 @@ func computedRank(ctx context.Context, ch chan bool) {
 	for i := 1; i <= 20; i++ {
 		fmt.Printf("now in Page: %d\n", i)
 		// navigate
-		if i == 1 {
-			err = chromedp.Run(ctx,
-				chromedp.Navigate("https://www.google.com.tw/search?q="+keyWord),
-				chromedp.Sleep(1*time.Second),
-				chromedp.WaitVisible(`#search div[id="rso"]`),
-			)
-		} else {
-			pageSelection := `a[aria-label="Page ` + strconv.Itoa(i) + `"]`
-			err = chromedp.Run(ctx,
-				chromedp.Click(pageSelection),
-				chromedp.Sleep(1*time.Second),
-				chromedp.WaitReady(`#search div[id="rso"]`),
-			)
-		}
+		err = chromedp.Run(ctx,
+			chromedp.Navigate("https://www.google.com.tw/search?q="+keyWord+"&start="+strconv.Itoa((i-1)*10)),
+			chromedp.WaitReady(`#search div[id="rso"]`),
+		)
 		if err != nil {
 			logger.Info("Run err :", err)
 			return
@@ -139,25 +129,11 @@ func main() {
 			// navigate
 			err = chromedp.Run(ctx,
 				chromedp.Navigate("https://www.google.com.tw/search?q="+keyWord+"&start="+strconv.Itoa(((i-1)*10))),
-				// chromedp.Sleep(1*time.Second),
 				chromedp.WaitReady(`#search div[id="rso"]`),
+				chromedp.Sleep(time.Second),
 			)
-			// if i == 1 {
-			// 	err = chromedp.Run(ctx,
-			// 		chromedp.Navigate("https://www.google.com.tw/search?q="+keyWord+"&start="+((i-1)*10)),
-			// 		// chromedp.Sleep(1*time.Second),
-			// 		chromedp.WaitReady(`#search div[id="rso"]`),
-			// 	)
-			// } else {
-			// 	pageSelection := `a[aria-label="Page ` + strconv.Itoa(i) + `"]`
-			// 	err = chromedp.Run(ctx,
-			// 		chromedp.Click(pageSelection),
-			// 		// chromedp.Sleep(1*time.Second),
-			// 		chromedp.WaitReady(`#search div[id="rso"]`),
-			// 	)
-			// }
 			if err != nil {
-				logger.Info("Run err :", err)
+				logger.Info("Run err :", err, i)
 				return
 			}
 
@@ -208,6 +184,31 @@ func outerPageSourceData(ctx context.Context) (string, error) {
 
 // 解析資料
 func ParsingData(res string, rank int, page int) (int, bool) {
+	// var hasCurrentItem bool
+	// ch := make(chan int)
+	// go func() {
+	// 	doc, err := goquery.NewDocumentFromReader(bytes.NewReader([]byte(res)))
+	// 	if err != nil {
+	// 		log.Fatal(err)
+	// 	}
+
+	// 	var itemTitle string
+	// 	hasCurrentItem = false
+	// 	doc.Find(".yuRUbf").Each(func(i int, s *goquery.Selection) {
+	// 		itemTitle = s.Find(".LC20lb").Text()
+	// 		isCurrentItem := strings.Contains(itemTitle, "Relithe") // 模糊搜尋是否含有關鍵字
+	// 		rank++
+	// 		if isCurrentItem {
+	// 			hasCurrentItem = true
+	// 			fmt.Print("\n")
+	// 			fmt.Printf("Rank：%d,\nPage：%d,\nIndex：%d,\nTitle：%s\n", rank, page, (i + 1), itemTitle)
+	// 		}
+	// 		time.Sleep(1 * time.Second)
+	// 	})
+	// 	ch <- 1
+	// }()
+	// <-ch
+	// return rank, hasCurrentItem
 	doc, err := goquery.NewDocumentFromReader(bytes.NewReader([]byte(res)))
 	if err != nil {
 		log.Fatal(err)
