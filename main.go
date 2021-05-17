@@ -6,227 +6,117 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io/ioutil"
 	"log"
-	"os"
+	"sort"
 	"strconv"
 	"strings"
-	"time"
+	"sync"
 
 	"github.com/PuerkitoBio/goquery"
-	"github.com/c9s/gomon/logger"
 	"github.com/chromedp/chromedp"
 )
 
-// 計算排名
-func computedRank(ctx context.Context, ch chan bool) {
-	var err error
-	Rank := 0 // 排名
-	hasCurrentItem := false
-	keyWord := "二手精品" // 搜尋關鍵字
+const (
+	// PageRange -
+	PageRange = 5
 
-	for i := 1; i <= 20; i++ {
-		fmt.Printf("now in Page: %d\n", i)
-		// navigate
-		err = chromedp.Run(ctx,
-			chromedp.Navigate("https://www.google.com.tw/search?q="+keyWord+"&start="+strconv.Itoa((i-1)*10)),
-			chromedp.WaitReady(`#search div[id="rso"]`),
-		)
-		if err != nil {
-			logger.Info("Run err :", err)
-			return
-		}
+	// 搜尋關鍵字
+	keyWord = "二手精品"
+)
 
-		// outer source data
-		htmlContent, runErr := outerPageSourceData(ctx)
-		if runErr != nil {
-			logger.Info("Outer err : %v", runErr)
-			return
-		}
-
-		sleepErr := chromedp.Run(ctx,
-			chromedp.Sleep(2*time.Second),
-		)
-		if sleepErr != nil {
-			log.Fatal(sleepErr)
-		}
-
-		Rank, hasCurrentItem = ParsingData(htmlContent, Rank, i)
-		if hasCurrentItem {
-			ctx.Done()
-			return
-		}
-		ch <- false
-	}
+// Result -
+type Result struct {
+	page   int
+	index  int
+	target bool
+	title  string
 }
+
+var wg sync.WaitGroup
 
 func main() {
 	options := []chromedp.ExecAllocatorOption{
-		chromedp.ExecPath("/Users/ian/Desktop/Chromium.app/Contents/MacOS/Chromium"),
+		chromedp.ExecPath("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"),
 		chromedp.Flag("no-default-browser-check", true),
 		chromedp.Flag("no-sandbox", true),
 		chromedp.Flag("blink-settings", "imagesEnabled=false"), // 不加載圖片
-		chromedp.Flag("headless", true),                        // 無頭模式
+		chromedp.Flag("headless", false),                       // 無頭模式
 		chromedp.WindowSize(1920, 1080),
 		chromedp.UserAgent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/77.0.3830.0 Safari/537.36"),
 	}
 
-	dir, err := ioutil.TempDir("", "chromedp-example")
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer os.RemoveAll(dir)
-
-	options = append(chromedp.DefaultExecAllocatorOptions[:], options...)
-
-	allocCtx, cancel := chromedp.NewExecAllocator(context.Background(), options...)
-	defer cancel()
-
-	// create chrome instance
-	ctx, cancel := chromedp.NewContext(
-		allocCtx,
-		chromedp.WithLogf(log.Printf),
+	allocCtx, cancel := chromedp.NewExecAllocator(
+		context.Background(),
+		append(
+			chromedp.DefaultExecAllocatorOptions[:],
+			options...,
+		)...,
 	)
 	defer cancel()
 
-	//建立一個上下文
-	// ctx, cancel = context.WithTimeout(ctx, 300*time.Second)
-	ctx, cancel = context.WithCancel(ctx)
-	defer cancel()
+	wg.Add(PageRange)
 
-	// ch := make(chan int32)
+	Rank := 0 // 排
+	res := make([]*Result, 0)
 
-	// go func(ctx context.Context, ch chan int32) {
-	// 	ch <- 1
-	// }(ctx, ch)
+	for x := 1; x <= PageRange; x++ {
 
-	// go func(ctx context.Context, ch chan int32) {
-	// 	ctx.Done()
-	// }(ctx, ch)
+		go func(page int) {
+			// open chrome
+			ctx, cancel := chromedp.NewContext(allocCtx)
+			defer cancel()
 
-	// var count int32 = 0
-	// for {
-	// 	select {
-	// 	case value := <-ch:
-	// 		count += value
-	// 	case <-ctx.Done():
-	// 		fmt.Println("finish")
-	// 		break
-	// 	}
-	// }
+			url := fmt.Sprintf("https://www.google.com.tw/search?q=%s&start=%s", keyWord, strconv.Itoa(((page - 1) * 10)))
+			fmt.Printf("visit: %s\n", url)
 
-	// spew.Dump(count)
-
-	ch := make(chan string)
-	Rank := 0 // 排名
-	hasCurrentItem := false
-	keyWord := "二手精品" // 搜尋關鍵字
-
-	for i := 1; i <= 10; i++ {
-		time.Sleep(time.Second)
-		go func(i int) {
-			fmt.Printf("now in Page: %d\n", i)
-			// navigate
-			err = chromedp.Run(ctx,
-				chromedp.Navigate("https://www.google.com.tw/search?q="+keyWord+"&start="+strconv.Itoa(((i-1)*10))),
+			var htmlContent string
+			err := chromedp.Run(
+				ctx,
+				chromedp.Navigate(url),
 				chromedp.WaitReady(`#search div[id="rso"]`),
-				chromedp.Sleep(time.Second),
+				chromedp.OuterHTML(`#search div[id="rso"]`, &htmlContent, chromedp.BySearch),
 			)
 			if err != nil {
-				logger.Info("Run err :", err, i)
-				return
+				panic(err)
 			}
 
-			// outer source data
-			htmlContent, runErr := outerPageSourceData(ctx)
-			if runErr != nil {
-				logger.Info("Outer err : %v", runErr)
-				return
-			}
+			res = append(res, ParsingData(htmlContent, Rank, page)...)
 
-			sleepErr := chromedp.Run(ctx,
-				chromedp.Sleep(2*time.Second),
-			)
-			if sleepErr != nil {
-				log.Fatal(sleepErr)
-			}
-
-			Rank, hasCurrentItem = ParsingData(htmlContent, Rank, i)
-			if hasCurrentItem {
-				ctx.Done()
-				return
-			}
-			ch <- "Not Found"
-		}(i)
+			wg.Done()
+		}(x)
 	}
+	wg.Wait()
 
-	for {
-		select {
-		case v := <-ch:
-			fmt.Println(v)
-		case <-ctx.Done():
-			fmt.Println("finish")
-			return
+	sort.SliceStable(res, func(i, j int) bool {
+		return res[i].page < res[j].page
+	})
+
+	for _, r := range res {
+		if r.target {
+			fmt.Printf("我在第%d頁 第%d個\n", r.page, r.index)
 		}
 	}
 }
 
-// 輸出page source data
-func outerPageSourceData(ctx context.Context) (string, error) {
-	var htmlContent string
-	err := chromedp.Run(ctx,
-		chromedp.WaitVisible(`#search div[id="rso"]`),
-		chromedp.OuterHTML(`#search div[id="rso"]`, &htmlContent, chromedp.BySearch),
-	)
-
-	return htmlContent, err
-}
-
-// 解析資料
-func ParsingData(res string, rank int, page int) (int, bool) {
-	// var hasCurrentItem bool
-	// ch := make(chan int)
-	// go func() {
-	// 	doc, err := goquery.NewDocumentFromReader(bytes.NewReader([]byte(res)))
-	// 	if err != nil {
-	// 		log.Fatal(err)
-	// 	}
-
-	// 	var itemTitle string
-	// 	hasCurrentItem = false
-	// 	doc.Find(".yuRUbf").Each(func(i int, s *goquery.Selection) {
-	// 		itemTitle = s.Find(".LC20lb").Text()
-	// 		isCurrentItem := strings.Contains(itemTitle, "Relithe") // 模糊搜尋是否含有關鍵字
-	// 		rank++
-	// 		if isCurrentItem {
-	// 			hasCurrentItem = true
-	// 			fmt.Print("\n")
-	// 			fmt.Printf("Rank：%d,\nPage：%d,\nIndex：%d,\nTitle：%s\n", rank, page, (i + 1), itemTitle)
-	// 		}
-	// 		time.Sleep(1 * time.Second)
-	// 	})
-	// 	ch <- 1
-	// }()
-	// <-ch
-	// return rank, hasCurrentItem
+// ParsingData - 解析資料
+func ParsingData(res string, rank int, page int) []*Result {
 	doc, err := goquery.NewDocumentFromReader(bytes.NewReader([]byte(res)))
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	var itemTitle string
-	hasCurrentItem := false
+	result := make([]*Result, 0)
 	doc.Find(".yuRUbf").Each(func(i int, s *goquery.Selection) {
-		itemTitle = s.Find(".LC20lb").Text()
-		isCurrentItem := strings.Contains(itemTitle, "Relithe") // 模糊搜尋是否含有關鍵字
-		rank++
-		if isCurrentItem {
-			hasCurrentItem = true
-			fmt.Print("\n")
-			fmt.Printf("Rank：%d,\nPage：%d,\nIndex：%d,\nTitle：%s\n", rank, page, (i + 1), itemTitle)
-		}
-		time.Sleep(1 * time.Second)
+		itemTitle := s.Find(".LC20lb").Text()
+		result = append(result, &Result{
+			page:  page,
+			index: i + 1,
+			title: s.Find(".LC20lb").Text(),
+			target: func() bool {
+				return strings.Contains(itemTitle, "Relithe")
+			}(),
+		})
 	})
 
-	return rank, hasCurrentItem
+	return result
 }
