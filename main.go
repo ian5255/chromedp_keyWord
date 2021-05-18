@@ -6,21 +6,37 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io/ioutil"
 	"log"
-	"os"
+	"sort"
 	"strconv"
 	"strings"
-	"time"
+	"sync"
 
 	"github.com/PuerkitoBio/goquery"
-	"github.com/c9s/gomon/logger"
 	"github.com/chromedp/chromedp"
 )
 
+const (
+	// PageRange -
+	PageRange = 5
+
+	// 搜尋關鍵字
+	keyWord = "二手精品"
+)
+
+// Result -
+type Result struct {
+	page   int
+	index  int
+	target bool
+	title  string
+}
+
+var wg sync.WaitGroup
+
 func main() {
 	options := []chromedp.ExecAllocatorOption{
-		chromedp.ExecPath("/Users/ian/Desktop/Chromium.app/Contents/MacOS/Chromium"),
+		chromedp.ExecPath("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"),
 		chromedp.Flag("no-default-browser-check", true),
 		chromedp.Flag("no-sandbox", true),
 		chromedp.Flag("blink-settings", "imagesEnabled=false"), // 不加載圖片
@@ -29,106 +45,78 @@ func main() {
 		chromedp.UserAgent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/77.0.3830.0 Safari/537.36"),
 	}
 
-	dir, err := ioutil.TempDir("", "chromedp-example")
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer os.RemoveAll(dir)
-
-	options = append(chromedp.DefaultExecAllocatorOptions[:], options...)
-
-	allocCtx, cancel := chromedp.NewExecAllocator(context.Background(), options...)
-	defer cancel()
-
-	// create chrome instance
-	ctx, cancel := chromedp.NewContext(
-		allocCtx,
-		chromedp.WithLogf(log.Printf),
+	allocCtx, cancel := chromedp.NewExecAllocator(
+		context.Background(),
+		append(
+			chromedp.DefaultExecAllocatorOptions[:],
+			options...,
+		)...,
 	)
 	defer cancel()
 
-	//建立一個上下文，超時時間為40s
-	ctx, cancel = context.WithTimeout(ctx, 300*time.Second)
-	defer cancel()
+	wg.Add(PageRange)
 
-	Rank := 0 // 排名
-	hasCurrentItem := false
-	keyWord := "二手精品" // 搜尋關鍵字
+	Rank := 0 // 排
+	res := make([]*Result, 0)
 
-	for i := 1; i <= 20; i++ {
-		fmt.Printf("now in Page: %d\n", i)
-		// navigate
-		if i == 1 {
-			err = chromedp.Run(ctx,
-				chromedp.Navigate("https://www.google.com.tw/search?q="+keyWord),
-				chromedp.Sleep(1*time.Second),
-				chromedp.WaitVisible(`#search div[id="rso"]`),
-			)
-		} else {
-			pageSelection := `a[aria-label="Page ` + strconv.Itoa(i) + `"]`
-			err = chromedp.Run(ctx,
-				chromedp.Click(pageSelection),
-				chromedp.Sleep(1*time.Second),
+	for x := 1; x <= PageRange; x++ {
+
+		go func(page int) {
+			// open chrome
+			ctx, cancel := chromedp.NewContext(allocCtx)
+			defer cancel()
+
+			url := fmt.Sprintf("https://www.google.com.tw/search?q=%s&start=%s", keyWord, strconv.Itoa(((page - 1) * 10)))
+			fmt.Printf("visit: %s\n", url)
+
+			var htmlContent string
+			err := chromedp.Run(
+				ctx,
+				chromedp.Navigate(url),
 				chromedp.WaitReady(`#search div[id="rso"]`),
+				chromedp.OuterHTML(`#search div[id="rso"]`, &htmlContent, chromedp.BySearch),
 			)
-		}
-		if err != nil {
-			logger.Info("Run err :", err)
-			return
-		}
+			if err != nil {
+				panic(err)
+			}
 
-		// outer source data
-		htmlContent, runErr := outerPageSourceData(ctx)
-		if runErr != nil {
-			logger.Info("Outer err : %v", runErr)
-			return
-		}
+			res = append(res, ParsingData(htmlContent, Rank, page)...)
 
-		sleepErr := chromedp.Run(ctx,
-			chromedp.Sleep(2*time.Second),
-		)
-		if sleepErr != nil {
-			log.Fatal(sleepErr)
-		}
+			wg.Done()
+		}(x)
+	}
+	wg.Wait()
 
-		Rank, hasCurrentItem = ParsingData(htmlContent, Rank, i)
-		if hasCurrentItem {
-			return
+	sort.SliceStable(res, func(i, j int) bool {
+		return res[i].page < res[j].page
+	})
+
+	for _, r := range res {
+		if r.target {
+			fmt.Printf("我在第%d頁 第%d個\n", r.page, r.index)
 		}
 	}
 }
 
-// 輸出page source data
-func outerPageSourceData(ctx context.Context) (string, error) {
-	var htmlContent string
-	err := chromedp.Run(ctx,
-		chromedp.WaitVisible(`#search div[id="rso"]`),
-		chromedp.OuterHTML(`#search div[id="rso"]`, &htmlContent, chromedp.BySearch),
-	)
-
-	return htmlContent, err
-}
-
-// 解析資料
-func ParsingData(res string, rank int, page int) (int, bool) {
+// ParsingData - 解析資料
+func ParsingData(res string, rank int, page int) []*Result {
 	doc, err := goquery.NewDocumentFromReader(bytes.NewReader([]byte(res)))
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	var itemTitle string
-	hasCurrentItem := false
+	result := make([]*Result, 0)
 	doc.Find(".yuRUbf").Each(func(i int, s *goquery.Selection) {
-		itemTitle = s.Find(".LC20lb").Text()
-		isCurrentItem := strings.Contains(itemTitle, "Relithe") // 模糊搜尋是否含有關鍵字
-		rank++
-		if isCurrentItem {
-			hasCurrentItem = true
-			fmt.Print("\n")
-			fmt.Printf("Rank：%d,\nPage：%d,\nIndex：%d,\nTitle：%s\n", rank, page, (i + 1), itemTitle)
-		}
-		time.Sleep(1 * time.Second)
+		itemTitle := s.Find(".LC20lb").Text()
+		result = append(result, &Result{
+			page:  page,
+			index: i + 1,
+			title: s.Find(".LC20lb").Text(),
+			target: func() bool {
+				return strings.Contains(itemTitle, "Relithe")
+			}(),
+		})
 	})
 
-	return rank, hasCurrentItem
+	return result
 }
