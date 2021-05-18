@@ -18,7 +18,7 @@ import (
 
 const (
 	// PageRange -
-	PageRange = 5
+	PageRange = 15
 
 	// 搜尋關鍵字
 	keyWord = "二手精品"
@@ -56,7 +56,6 @@ func main() {
 
 	wg.Add(PageRange)
 
-	Rank := 0 // 排
 	res := make([]*Result, 0)
 
 	for x := 1; x <= PageRange; x++ {
@@ -80,7 +79,7 @@ func main() {
 				panic(err)
 			}
 
-			res = append(res, ParsingData(htmlContent, Rank, page)...)
+			res = append(res, ParsingData(htmlContent, page)...)
 
 			wg.Done()
 		}(x)
@@ -93,13 +92,13 @@ func main() {
 
 	for _, r := range res {
 		if r.target {
-			fmt.Printf("我在第%d頁 第%d個\n", r.page, r.index)
+			fmt.Printf("目前排名第%d名，第%d頁 第%d個\n", (((r.page - 1) * 10) + r.index), r.page, r.index)
 		}
 	}
 }
 
 // ParsingData - 解析資料
-func ParsingData(res string, rank int, page int) []*Result {
+func ParsingData(res string, page int) []*Result {
 	doc, err := goquery.NewDocumentFromReader(bytes.NewReader([]byte(res)))
 	if err != nil {
 		log.Fatal(err)
