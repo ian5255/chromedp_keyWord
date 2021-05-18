@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -22,6 +23,9 @@ const (
 
 	// 搜尋關鍵字
 	keyWord = "二手精品"
+
+	// 記錄資料檔名
+	FileName = "crawlerRecord.json"
 )
 
 // Result -
@@ -93,6 +97,8 @@ func main() {
 	for _, r := range res {
 		if r.target {
 			fmt.Printf("目前排名第%d名，第%d頁 第%d個\n", (((r.page - 1) * 10) + r.index), r.page, r.index)
+			fmt.Printf("Title：%s\n", r.title)
+			openFile(FileName)
 		}
 	}
 }
@@ -118,4 +124,30 @@ func ParsingData(res string, page int) []*Result {
 	})
 
 	return result
+}
+
+// 讀取檔案
+func openFile(FileName string) {
+	_, err := os.Open("crawlerRecord.json") // 開啟檔案
+	if err != nil {
+		// 檢查檔案不存在則建立
+		if os.IsNotExist(err) {
+			newFile(FileName)
+			return
+		}
+		log.Fatal(err)
+	}
+}
+
+// 建立檔案
+func newFile(FileName string) {
+	f, err := os.Create(FileName)
+	defer f.Close()
+	if err != nil {
+		fmt.Println(err.Error())
+	}
+	// else {
+	// 	_, err = f.Write([]byte("要写入的文本内容"))
+	// 	log.Fatal(err)
+	// }
 }
