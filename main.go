@@ -5,7 +5,9 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"os"
 	"sort"
@@ -16,11 +18,12 @@ import (
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/chromedp/chromedp"
+	"github.com/davecgh/go-spew/spew"
 )
 
 const (
 	// PageRange -
-	PageRange = 15
+	PageRange = 5
 
 	// 搜尋關鍵字
 	keyWord = "二手精品"
@@ -31,12 +34,12 @@ const (
 
 // Result -
 type Result struct {
-	AT     string
-	rank   int
-	page   int
-	index  int
-	target bool
-	title  string
+	AT     string `json:"at"`
+	Rank   int    `json:"rank"`
+	Page   int    `json:"page"`
+	Index  int    `json:"index"`
+	Target bool   `json:"target"`
+	Title  string `json:"title"`
 }
 
 var wg sync.WaitGroup
@@ -94,15 +97,18 @@ func main() {
 	wg.Wait()
 
 	sort.SliceStable(res, func(i, j int) bool {
-		return res[i].page < res[j].page
+		return res[i].Page < res[j].Page
 	})
 
 	for _, r := range res {
-		if r.target {
-			fmt.Printf("目前排名第%d名，第%d頁 第%d個\n", r.rank, r.page, r.index)
+		if r.Target {
+			fmt.Printf("目前排名第%d名，第%d頁 第%d個\n", r.Rank, r.Page, r.Index)
 			fmt.Printf("AT：%s\n", r.AT)
-			fmt.Printf("Title：%s\n", r.title)
+			fmt.Printf("Title：%s\n", r.Title)
 			fmt.Printf("%s", time.Now().String())
+			fmt.Println("\nwrite data \n")
+			writeFile(FileName, res)
+
 		}
 	}
 }
@@ -119,11 +125,11 @@ func ParsingData(res string, page int) []*Result {
 		itemTitle := s.Find(".LC20lb").Text()
 		result = append(result, &Result{
 			AT:    time.Now().String(),
-			rank:  ((page - 1) * 10) + i + 1,
-			page:  page,
-			index: i + 1,
-			title: s.Find(".LC20lb").Text(),
-			target: func() bool {
+			Rank:  ((page - 1) * 10) + i + 1,
+			Page:  page,
+			Index: i + 1,
+			Title: s.Find(".LC20lb").Text(),
+			Target: func() bool {
 				return strings.Contains(itemTitle, "Relithe")
 			}(),
 		})
@@ -156,6 +162,32 @@ func newFile(FileName string) {
 	f, err := os.Create(FileName)
 	defer f.Close()
 	if err != nil {
-		fmt.Println(err.Error())
+		fmt.Println("newFile faild：", err.Error())
 	}
+}
+
+// 寫入資料
+func writeFile(fileName string, list []*Result) {
+	f, err := os.OpenFile(fileName, os.O_RDWR|os.O_CREATE, 0755)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer f.Close()
+	fmt.Println("\nwriting data \n", list)
+	spew.Dump(list)
+	data := jsonMarshal(list)
+	// fmt.Println("\n轉檔後：\n", data)
+	err = ioutil.WriteFile(fileName, data, 0644)
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
+// 資料轉檔
+func jsonMarshal(list []*Result) []byte {
+	data, err := json.Marshal(list)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return data
 }
