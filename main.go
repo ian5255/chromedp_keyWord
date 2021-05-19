@@ -103,7 +103,6 @@ func main() {
 			fmt.Printf("AT：%s\n", r.AT)
 			fmt.Printf("Title：%s\n", r.title)
 			fmt.Printf("%s", time.Now().String())
-			openFile(FileName)
 		}
 	}
 }
@@ -144,6 +143,12 @@ func openFile(FileName string) {
 		}
 		log.Fatal(err)
 	}
+}
+
+// 檢查檔案是否存在
+func checkFileIsExist(FileName string) bool {
+	_, err := os.Open(FileName) // 開啟檔案
+	return !os.IsNotExist(err)
 }
 
 // 建立檔案
