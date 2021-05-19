@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/chromedp/chromedp"
@@ -30,6 +31,8 @@ const (
 
 // Result -
 type Result struct {
+	AT     string
+	rank   int
 	page   int
 	index  int
 	target bool
@@ -96,8 +99,10 @@ func main() {
 
 	for _, r := range res {
 		if r.target {
-			fmt.Printf("目前排名第%d名，第%d頁 第%d個\n", (((r.page - 1) * 10) + r.index), r.page, r.index)
+			fmt.Printf("目前排名第%d名，第%d頁 第%d個\n", r.rank, r.page, r.index)
+			fmt.Printf("AT：%s\n", r.AT)
 			fmt.Printf("Title：%s\n", r.title)
+			fmt.Printf("%s", time.Now().String())
 			openFile(FileName)
 		}
 	}
@@ -114,6 +119,8 @@ func ParsingData(res string, page int) []*Result {
 	doc.Find(".yuRUbf").Each(func(i int, s *goquery.Selection) {
 		itemTitle := s.Find(".LC20lb").Text()
 		result = append(result, &Result{
+			AT:    time.Now().String(),
+			rank:  ((page - 1) * 10) + i + 1,
 			page:  page,
 			index: i + 1,
 			title: s.Find(".LC20lb").Text(),
@@ -146,8 +153,4 @@ func newFile(FileName string) {
 	if err != nil {
 		fmt.Println(err.Error())
 	}
-	// else {
-	// 	_, err = f.Write([]byte("要写入的文本内容"))
-	// 	log.Fatal(err)
-	// }
 }
