@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
 	"sync"
 	"time"
 
@@ -31,6 +32,17 @@ const (
 	// 記錄資料檔名
 	FileName = "crawlerRecord.json"
 )
+
+// CrawlerRecordData - json記錄資料
+type CrawlerRecordData struct {
+	AT    string `json:"at"`
+	Rank  int    `json:"rank"`
+	Page  int    `json:"page"`
+	Index int    `json:"index"`
+	Title string `json:"title"`
+}
+
+var CrawlerRecord = make([]*CrawlerRecordData, 0) // 記錄資料陣列
 
 // Result -
 type Result struct {
@@ -106,9 +118,15 @@ func main() {
 			fmt.Printf("AT：%s\n", r.AT)
 			fmt.Printf("Title：%s\n", r.Title)
 			fmt.Printf("%s", time.Now().String())
-			fmt.Println("\nwrite data \n")
-			writeFile(FileName, res)
 
+			CrawlerRecord = append(CrawlerRecord, &CrawlerRecordData{
+				AT:    r.AT,
+				Rank:  r.Rank,
+				Page:  r.Page,
+				Index: r.Index,
+				Title: r.Title,
+			})
+			writeFile(FileName, CrawlerRecord) // 寫入json檔
 		}
 	}
 }
@@ -167,7 +185,7 @@ func newFile(FileName string) {
 }
 
 // 寫入資料
-func writeFile(fileName string, list []*Result) {
+func writeFile(fileName string, list []*CrawlerRecordData) {
 	f, err := os.OpenFile(fileName, os.O_RDWR|os.O_CREATE, 0755)
 	if err != nil {
 		log.Fatal(err)
@@ -175,16 +193,15 @@ func writeFile(fileName string, list []*Result) {
 	defer f.Close()
 	fmt.Println("\nwriting data \n", list)
 	spew.Dump(list)
-	data := jsonMarshal(list)
-	// fmt.Println("\n轉檔後：\n", data)
-	err = ioutil.WriteFile(fileName, data, 0644)
+	data := jsonMarshal(list)                    // 資料轉檔
+	err = ioutil.WriteFile(fileName, data, 0644) // 寫入json檔
 	if err != nil {
 		log.Fatal(err)
 	}
 }
 
 // 資料轉檔
-func jsonMarshal(list []*Result) []byte {
+func jsonMarshal(list []*CrawlerRecordData) []byte {
 	data, err := json.Marshal(list)
 	if err != nil {
 		log.Fatal(err)
