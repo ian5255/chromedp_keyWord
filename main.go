@@ -19,7 +19,6 @@ import (
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/chromedp/chromedp"
-	"github.com/davecgh/go-spew/spew"
 )
 
 const (
@@ -119,7 +118,12 @@ func main() {
 			fmt.Printf("Title：%s\n", r.Title)
 			fmt.Printf("%s", time.Now().String())
 
-			CrawlerRecord = append(CrawlerRecord, &CrawlerRecordData{
+			// 先讀取檔案資料
+			data := ReadFile(FileName)
+
+			fmt.Println("\n====================================================================================================\n")
+
+			CrawlerRecord = append(data, &CrawlerRecordData{
 				AT:    r.AT,
 				Rank:  r.Rank,
 				Page:  r.Page,
@@ -157,16 +161,20 @@ func ParsingData(res string, page int) []*Result {
 }
 
 // 讀取檔案
-func openFile(FileName string) {
-	_, err := os.Open("crawlerRecord.json") // 開啟檔案
+func ReadFile(FileName string) []*CrawlerRecordData {
+	f, err := ioutil.ReadFile(FileName) // 讀取檔案
 	if err != nil {
-		// 檢查檔案不存在則建立
-		if os.IsNotExist(err) {
-			newFile(FileName)
-			return
-		}
-		log.Fatal(err)
+		log.Fatal("read data faild: ", err)
 	}
+
+	// data := make([]byte, 100)
+	// n, err := f.Read(data)
+	// if err != nil {
+	// 	log.Fatal("read data faild: ", err)
+	// }
+
+	data := jsonUnmarshal(f) // 資料轉檔 - 解碼
+	return data
 }
 
 // 檢查檔案是否存在
@@ -191,8 +199,7 @@ func writeFile(fileName string, list []*CrawlerRecordData) {
 		log.Fatal(err)
 	}
 	defer f.Close()
-	fmt.Println("\nwriting data \n", list)
-	spew.Dump(list)
+
 	data := jsonMarshal(list)                    // 資料轉檔
 	err = ioutil.WriteFile(fileName, data, 0644) // 寫入json檔
 	if err != nil {
@@ -200,11 +207,22 @@ func writeFile(fileName string, list []*CrawlerRecordData) {
 	}
 }
 
-// 資料轉檔
+// 資料轉檔 - data to byte
 func jsonMarshal(list []*CrawlerRecordData) []byte {
 	data, err := json.Marshal(list)
 	if err != nil {
 		log.Fatal(err)
 	}
 	return data
+}
+
+// 資料轉膽 - byte to data
+func jsonUnmarshal(data []byte) []*CrawlerRecordData {
+	var CrawlerRecordDataArr []*CrawlerRecordData
+	err := json.Unmarshal(data, &CrawlerRecordDataArr)
+	if err != nil {
+		log.Fatal("json Unmarshal faild: ", err)
+	}
+
+	return CrawlerRecordDataArr
 }
