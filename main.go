@@ -215,7 +215,7 @@ func writeFile(fileName string, list []*CrawlerRecordData) {
 
 // 資料轉檔 - data to byte
 func jsonMarshal(list []*CrawlerRecordData) []byte {
-	data, err := json.Marshal(list)
+	data, err := json.MarshalIndent(list, "", "  ")
 	if err != nil {
 		log.Fatal(err)
 	}
