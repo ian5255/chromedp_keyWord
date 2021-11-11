@@ -30,7 +30,7 @@ const (
 	// keyWord = "二手精品"
 
 	// 記錄資料檔名
-	FileName = "crawlerRecord.json"
+	FileName = "crawlerHistory.json"
 )
 
 // CrawlerRecordData - json記錄資料
@@ -125,7 +125,14 @@ func main() {
 			fmt.Printf("%s", time.Now().String())
 
 			// 先讀取檔案資料
-			data := ReadFile(FileName)
+
+			fileIsExist := checkFileIsExist(FileName) // 先檢查紀錄的json檔是否存在
+			var data []*CrawlerRecordData
+			if fileIsExist {
+				data = ReadFile(FileName)
+			} else {
+				newFile(FileName) // 建立檔案並預先寫入 []
+			}
 
 			fmt.Println("\n====================================================================================================\n")
 
@@ -189,12 +196,19 @@ func checkFileIsExist(FileName string) bool {
 	return !os.IsNotExist(err)
 }
 
-// 建立檔案
+// 建立檔案並預先寫入 []
 func newFile(FileName string) {
 	f, err := os.Create(FileName)
 	defer f.Close()
 	if err != nil {
 		fmt.Println("newFile faild：", err.Error())
+	}
+
+	// 寫入 []
+	emptyData := jsonMarshal(CrawlerRecord)
+	err = ioutil.WriteFile(FileName, emptyData, 0644) // 寫入json檔
+	if err != nil {
+		log.Fatal(err)
 	}
 }
 
@@ -222,7 +236,7 @@ func jsonMarshal(list []*CrawlerRecordData) []byte {
 	return data
 }
 
-// 資料轉膽 - byte to data
+// 資料轉檔 - byte to data
 func jsonUnmarshal(data []byte) []*CrawlerRecordData {
 	var CrawlerRecordDataArr []*CrawlerRecordData
 	err := json.Unmarshal(data, &CrawlerRecordDataArr)
