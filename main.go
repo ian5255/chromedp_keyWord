@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -22,11 +23,11 @@ import (
 )
 
 const (
-	// PageRange -
-	PageRange = 5
+	// // PageRange -
+	// PageRange = 5
 
-	// 搜尋關鍵字
-	keyWord = "二手精品"
+	// // 搜尋關鍵字
+	// keyWord = "二手精品"
 
 	// 記錄資料檔名
 	FileName = "crawlerRecord.json"
@@ -56,6 +57,11 @@ type Result struct {
 var wg sync.WaitGroup
 
 func main() {
+	// command line
+	keyWord := flag.String("keyword", "二手精品", "想爬的關鍵字。default為「二手精品」")
+	PageRange := flag.Int("pageRange", 5, "想爬的範圍。default為5頁")
+	flag.Parse()
+
 	options := []chromedp.ExecAllocatorOption{
 		chromedp.ExecPath("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"),
 		chromedp.Flag("no-default-browser-check", true),
@@ -75,18 +81,18 @@ func main() {
 	)
 	defer cancel()
 
-	wg.Add(PageRange)
+	wg.Add(*PageRange)
 
 	res := make([]*Result, 0)
 
-	for x := 1; x <= PageRange; x++ {
+	for x := 1; x <= *PageRange; x++ {
 
 		go func(page int) {
 			// open chrome
 			ctx, cancel := chromedp.NewContext(allocCtx)
 			defer cancel()
 
-			url := fmt.Sprintf("https://www.google.com.tw/search?q=%s&start=%s", keyWord, strconv.Itoa(((page - 1) * 10)))
+			url := fmt.Sprintf("https://www.google.com.tw/search?q=%s&start=%s", *keyWord, strconv.Itoa(((page - 1) * 10)))
 			fmt.Printf("visit: %s\n", url)
 
 			var htmlContent string
